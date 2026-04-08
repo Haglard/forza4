@@ -267,14 +267,16 @@ typedef struct {
 
 - (void)drawPanel {
     float x = PANEL_X, y = WIN_H - 28;
+    NSColor *bright = [NSColor colorWithWhite:0.92 alpha:1];
+    NSColor *mid    = [NSColor colorWithWhite:0.70 alpha:1];
     NSDictionary *titleA = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
+                              NSForegroundColorAttributeName: bright };
     NSDictionary *hdrA   = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:11],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
+                              NSForegroundColorAttributeName: bright };
     NSDictionary *bodyA  = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular],
-                              NSForegroundColorAttributeName: [NSColor secondaryLabelColor] };
+                              NSForegroundColorAttributeName: mid };
     NSDictionary *hiA    = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
+                              NSForegroundColorAttributeName: bright };
 
     [@"Vibe Forza 4" drawAtPoint:NSMakePoint(x, y) withAttributes:titleA]; y -= 22;
 
@@ -331,7 +333,7 @@ typedef struct {
     }
 
     NSDictionary *hintA = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
-                             NSForegroundColorAttributeName: [NSColor tertiaryLabelColor] };
+                             NSForegroundColorAttributeName: [NSColor colorWithWhite:0.45 alpha:1] };
     [@"⌘N Nuova Partita  ·  ⌘Z Annulla mossa"
      drawAtPoint:NSMakePoint(x, 10) withAttributes:hintA];
 }
