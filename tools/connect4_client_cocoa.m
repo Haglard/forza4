@@ -557,10 +557,14 @@ typedef struct {
 - (void)dismiss;
 @end
 @implementation SplashController {
-    NSPanel *_panel; NSTimer *_timer; void (^_done)(void);
+    NSPanel        *_panel;
+    void           (^_done)(void);
+    SplashController *_selfRetain; // keeps self alive until dismiss
 }
 - (void)showRelativeTo:(NSWindow *)parent completion:(void(^)(void))done {
     _done = done;
+    _selfRetain = self;  // prevent ARC from deallocating before dismiss
+
     const CGFloat W=460, H=420;
     NSRect pf = parent.frame;
     NSRect fr = NSMakeRect(pf.origin.x+(pf.size.width-W)/2,
@@ -569,19 +573,22 @@ typedef struct {
         styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     _panel.backgroundColor = [NSColor blackColor];
     _panel.level = NSFloatingWindowLevel;
+    _panel.acceptsMouseMovedEvents = YES;
+
     SplashView *sv = [[SplashView alloc] initWithFrame:NSMakeRect(0,0,W,H)];
-    __weak SplashController *ws = self;
-    sv.onTap = ^{ [ws dismiss]; };
+    sv.onTap = ^{ [self dismiss]; };   // strong capture: safe because _selfRetain holds self
     _panel.contentView = sv;
     [_panel makeKeyAndOrderFront:nil];
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(60.0*NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{ [ws dismiss]; });
+                   dispatch_get_main_queue(), ^{ [self dismiss]; });
 }
 - (void)dismiss {
     if (!_panel) return;
     [_panel orderOut:nil]; _panel = nil;
-    [_timer invalidate]; _timer = nil;
-    if (_done) { _done(); _done = nil; }
+    void (^cb)(void) = _done; _done = nil;
+    if (cb) cb();            // call before releasing self-retain
+    _selfRetain = nil;       // release last strong ref — may dealloc self here
 }
 @end
 
