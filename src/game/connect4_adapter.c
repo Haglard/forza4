@@ -5,6 +5,7 @@
 // =============================================
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 #include "game/connect4_adapter.h"
 #include "connect4/board.h"
 #include "connect4/movegen.h"
@@ -135,6 +136,20 @@ static GameAPI C4_API = {
 };
 
 const GameAPI *c4_api(void) { return &C4_API; }
+
+void c4_new_game_randomize(void) {
+    rng_t r;
+    uint64_t t = (uint64_t)time(NULL) ^ (uint64_t)(uintptr_t)&r;
+    uint64_t S[4] = {
+        t,
+        ~t,
+        (t << 17) | (t >> 47),
+        t * 0x9e3779b97f4a7c15ULL
+    };
+    rng_seed(&r, S);
+    c4_zobrist_init(&gZ, &r);
+    gZ_inited = 1;
+}
 
 int c4_init_state_str(game_state_t *st, const char *pos) {
     c4_state_t *S = (c4_state_t *)st;

@@ -128,6 +128,7 @@ typedef struct {
     _message = @"Partita iniziata";
     _sinfoValid = NO; _scoreWhite = 0; _engineBusy = NO;
     memset(_hist, 0, sizeof(_hist));
+    c4_new_game_randomize();  // re-seed Zobrist → TT misses → varied play
     c4_init_state_str(_st, "startpos");
     memset(&_sp, 0, sizeof(_sp));
     _sp.use_time = 1; _sp.time_ms = tms; _sp.max_depth = 99;
@@ -293,12 +294,19 @@ typedef struct {
         NSString *scS = (abs(sc) >= 29000)
             ? [NSString stringWithFormat:@"%sMatto", sc > 0 ? "+" : "-"]
             : [NSString stringWithFormat:@"%+.2f", sc/100.0];
-        [[NSString stringWithFormat:@"Score: %@  depth: %d", scS, _sinfoDepth]
+        [[NSString stringWithFormat:@"Score: %@   Profondità: %d", scS, _sinfoDepth]
          drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+        NSString *nodesS = (_sinfoNodes >= 1000000)
+            ? [NSString stringWithFormat:@"%.2fM", _sinfoNodes/1e6]
+            : (_sinfoNodes >= 1000)
+            ? [NSString stringWithFormat:@"%.1fK", _sinfoNodes/1e3]
+            : [NSString stringWithFormat:@"%llu", (unsigned long long)_sinfoNodes];
         NSString *npsS = (_sinfoNPS >= 1e6)
-            ? [NSString stringWithFormat:@"%.1fM nps", _sinfoNPS/1e6]
-            : [NSString stringWithFormat:@"%.0fK nps", _sinfoNPS/1e3];
-        [[NSString stringWithFormat:@"%@  t:%.1fs", npsS, _sinfoTimeSec]
+            ? [NSString stringWithFormat:@"%.1fM/s", _sinfoNPS/1e6]
+            : [NSString stringWithFormat:@"%.0fK/s", _sinfoNPS/1e3];
+        [[NSString stringWithFormat:@"Nodi: %@   NPS: %@", nodesS, npsS]
+         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+        [[NSString stringWithFormat:@"Tempo: %.2fs", _sinfoTimeSec]
          drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
         if (_sinfoPV[0]) {
             [[NSString stringWithFormat:@"PV: %@",
@@ -452,7 +460,18 @@ typedef struct {
     job->completion = ^(search_result_t *out) {
         self->_engineBusy = NO;
         if (self->_generation != gen) { [self setNeedsDisplay:YES]; return; }
-        if (!out->best_move) { self->_message = @"Motore: nessuna mossa"; [self setNeedsDisplay:YES]; return; }
+        if (!out->best_move) {
+            // Fallback: pick a random legal move rather than leaving game stuck
+            game_move_t lms[C4_COLS];
+            int n = self->_api->generate_legal(self->_st, lms, C4_COLS);
+            if (n > 0) {
+                [self applyMove:lms[arc4random_uniform((uint32_t)n)]];
+            } else {
+                self->_message = @"Motore: nessuna mossa disponibile";
+                [self setNeedsDisplay:YES];
+            }
+            return;
+        }
         self->_scoreWhite   = (stm == C4_YELLOW) ? out->score : -out->score;
         self->_sinfoValid   = YES;
         self->_sinfoSide    = stm;
@@ -611,6 +630,7 @@ typedef struct {
 
     self.gameView = [[C4View alloc] initWithFrame:NSMakeRect(0,0,WIN_W,WIN_H)];
     self.window.contentView = self.gameView;
+    [NSApp activateIgnoringOtherApps:YES];
     [self.window makeKeyAndOrderFront:nil];
 
     // Menu
