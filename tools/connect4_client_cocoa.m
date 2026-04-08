@@ -514,12 +514,12 @@ typedef struct {
     job->completion = ^(search_result_t *out) {
         self->_engineBusy = NO;
         if (self->_generation != gen) { [self setNeedsDisplay:YES]; return; }
-        if (!out->best_move) {
-            // Fallback: pick a random legal move rather than leaving game stuck
+        if (out->pv_len == 0) {
+            // No PV found (budget expired before d=1): fallback to first legal move
             game_move_t lms[C4_COLS];
             int n = self->_api->generate_legal(self->_st, lms, C4_COLS);
             if (n > 0) {
-                [self applyMove:lms[arc4random_uniform((uint32_t)n)]];
+                [self applyMove:lms[0]];
             } else {
                 self->_message = @"Motore: nessuna mossa disponibile";
                 [self setNeedsDisplay:YES];
