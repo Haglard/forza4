@@ -36,16 +36,17 @@ static void *engine_thread(void *arg) {
 }
 
 // ---- Layout ----
-#define CELL   72.0
-#define COLS   7
-#define ROWS   6
-#define BRD_X  40.0
-#define BRD_Y  60.0
-#define BRD_W  (COLS * CELL)
-#define BRD_H  (ROWS * CELL)
-#define WIN_W  620.0
-#define WIN_H  600.0
-#define PANEL_X (BRD_X + BRD_W + 18.0)
+#define CELL    72.0
+#define COLS    7
+#define ROWS    6
+#define BRD_X   24.0
+#define BRD_Y   56.0
+#define BRD_W   (COLS * CELL)
+#define BRD_H   (ROWS * CELL)
+#define WIN_W   820.0
+#define WIN_H   600.0
+#define PANEL_X (BRD_X + BRD_W + 18.0)   // 24+504+18 = 546
+#define PNL_W   (WIN_W - PANEL_X - 14.0)  // ~260
 #define UNDO_MAX 42
 
 typedef enum { MODE_HVC = 1, MODE_CVC = 2 } play_mode_t;
@@ -266,91 +267,142 @@ typedef struct {
 }
 
 - (void)drawPanel {
-    float x = PANEL_X, y = WIN_H - 28;
-    NSColor *bright = [NSColor colorWithWhite:0.92 alpha:1];
-    NSColor *mid    = [NSColor colorWithWhite:0.70 alpha:1];
-    NSDictionary *titleA = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
-                              NSForegroundColorAttributeName: bright };
-    NSDictionary *hdrA   = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:11],
-                              NSForegroundColorAttributeName: bright };
-    NSDictionary *bodyA  = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular],
-                              NSForegroundColorAttributeName: mid };
-    NSDictionary *hiA    = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
-                              NSForegroundColorAttributeName: bright };
+    float x = PANEL_X, pw = PNL_W;
+    float y = WIN_H - 18;
 
+    // Panel background — slightly lighter than board area
+    [[NSColor colorWithRed:0.09 green:0.12 blue:0.26 alpha:1] setFill];
+    NSRectFill(NSMakeRect(PANEL_X - 10, 0, pw + 20, WIN_H));
+
+    NSColor *colBright = [NSColor colorWithWhite:0.93 alpha:1];
+    NSColor *colMid    = [NSColor colorWithWhite:0.68 alpha:1];
+    NSColor *colDim    = [NSColor colorWithWhite:0.42 alpha:1];
+    NSColor *colGold   = [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1];
+    NSColor *colSep    = [NSColor colorWithWhite:0.26 alpha:1];
+
+    NSDictionary *titleA   = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
+                                NSForegroundColorAttributeName: colGold };
+    NSDictionary *sectionA = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:8],
+                                NSForegroundColorAttributeName: colDim,
+                                NSKernAttributeName: @(1.8) };
+    NSDictionary *labelA   = @{ NSFontAttributeName: [NSFont systemFontOfSize:11],
+                                NSForegroundColorAttributeName: colMid };
+    NSDictionary *valueA   = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightMedium],
+                                NSForegroundColorAttributeName: colBright };
+    NSDictionary *hiA      = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightBold],
+                                NSForegroundColorAttributeName: colGold };
+    NSDictionary *moveA    = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightRegular],
+                                NSForegroundColorAttributeName: colMid };
+
+    // ---- Title ----
     [@"Vibe Forza 4" drawAtPoint:NSMakePoint(x, y) withAttributes:titleA]; y -= 22;
 
+    // ---- Mode / turn ----
     const c4_board_t *b = c4_state_as_board(_st);
     int stm = b->side_to_move;
     NSString *turnS = (stm == C4_YELLOW) ? @"🟡 Giallo" : @"🔴 Rosso";
-    NSString *modeS = (_mode == MODE_HVC) ? @"HvC" : @"CvC";
     NSString *busyS = _engineBusy ? @" ⏳" : @"";
-    [[NSString stringWithFormat:@"%@ — Turno: %@%@", modeS, turnS, busyS]
-     drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 22;
+    [[NSString stringWithFormat:@"%@ · %@%@",
+      (_mode == MODE_HVC) ? @"HvC" : @"CvC", turnS, busyS]
+     drawAtPoint:NSMakePoint(x, y) withAttributes:labelA]; y -= 22;
 
-    // Eval bar
-    [self drawEvalBar:x y:y width:WIN_W - PANEL_X - 18]; y -= 26;
+    // ---- Eval bar ----
+    [self drawEvalBar:x y:y width:pw]; y -= 28;
 
+    // ---- Search stats ----
     if (_sinfoValid) {
+        [colSep setFill]; NSRectFill(NSMakeRect(x, y + 5, pw, 1)); y -= 16;
+        [@"ANALISI MOTORE" drawAtPoint:NSMakePoint(x, y) withAttributes:sectionA]; y -= 15;
+
         int sc = (_sinfoSide == C4_YELLOW) ? _sinfoScore : -_sinfoScore;
         NSString *scS = (abs(sc) >= 29000)
             ? [NSString stringWithFormat:@"%sMatto", sc > 0 ? "+" : "-"]
             : [NSString stringWithFormat:@"%+.2f", sc/100.0];
-        [[NSString stringWithFormat:@"Score: %@   Profondità: %d", scS, _sinfoDepth]
-         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
         NSString *nodesS = (_sinfoNodes >= 1000000)
             ? [NSString stringWithFormat:@"%.2fM", _sinfoNodes/1e6]
             : (_sinfoNodes >= 1000)
-            ? [NSString stringWithFormat:@"%.1fK", _sinfoNodes/1e3]
+            ? [NSString stringWithFormat:@"%.0fK", _sinfoNodes/1e3]
             : [NSString stringWithFormat:@"%llu", (unsigned long long)_sinfoNodes];
         NSString *npsS = (_sinfoNPS >= 1e6)
             ? [NSString stringWithFormat:@"%.1fM/s", _sinfoNPS/1e6]
             : [NSString stringWithFormat:@"%.0fK/s", _sinfoNPS/1e3];
-        [[NSString stringWithFormat:@"Nodi: %@   NPS: %@", nodesS, npsS]
-         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
-        [[NSString stringWithFormat:@"Tempo: %.2fs", _sinfoTimeSec]
-         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+
+        // stat helper: label left, value right-aligned
+        __block float _sy = y;
+        void (^srow)(NSString *, NSString *) = ^(NSString *lbl, NSString *val) {
+            [lbl drawAtPoint:NSMakePoint(x, _sy) withAttributes:labelA];
+            NSSize vs = [val sizeWithAttributes:valueA];
+            [val drawAtPoint:NSMakePoint(x + pw - vs.width, _sy) withAttributes:valueA];
+            _sy -= 15;
+        };
+        srow(@"Valutazione", scS);
+        srow(@"Profondità",  [NSString stringWithFormat:@"%d", _sinfoDepth]);
+        srow(@"Nodi",        nodesS);
+        srow(@"NPS",         npsS);
+        srow(@"Tempo",       [NSString stringWithFormat:@"%.2fs", _sinfoTimeSec]);
+        y = _sy;
+
         if (_sinfoPV[0]) {
-            [[NSString stringWithFormat:@"PV: %@",
-              [NSString stringWithUTF8String:_sinfoPV]]
-             drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+            y -= 2;
+            [@"PV" drawAtPoint:NSMakePoint(x, y) withAttributes:labelA];
+            [[NSString stringWithUTF8String:_sinfoPV]
+             drawAtPoint:NSMakePoint(x + 26, y) withAttributes:moveA];
+            y -= 15;
         }
         y -= 4;
     }
 
-    [[NSColor separatorColor] setFill];
-    NSRectFill(NSMakeRect(x, y, WIN_W-PANEL_X-18, 1)); y -= 18;
-    [@"Mosse giocate" drawAtPoint:NSMakePoint(x, y) withAttributes:hdrA]; y -= 16;
-    int startH = (_histN > 18) ? _histN - 18 : 0;
+    // ---- Move history ----
+    [colSep setFill]; NSRectFill(NSMakeRect(x, y + 5, pw, 1)); y -= 16;
+    [@"MOSSE GIOCATE" drawAtPoint:NSMakePoint(x, y) withAttributes:sectionA]; y -= 15;
+
+    int maxH = (int)((y - 28) / 14);
+    if (maxH < 1) maxH = 1;
+    int startH = (_histN > maxH) ? _histN - maxH : 0;
     for (int i = startH; i < _histN; i++) {
-        NSString *ms = [NSString stringWithUTF8String:_hist[i]];
-        [[NSString stringWithFormat:@"%2d. %@", i+1, ms]
+        [[NSString stringWithFormat:@"%2d. %s", i+1, _hist[i]]
          drawAtPoint:NSMakePoint(x, y)
-         withAttributes:(i == _histN-1) ? hiA : bodyA]; y -= 15;
+         withAttributes:(i == _histN-1) ? hiA : moveA]; y -= 14;
     }
     if (_histN == 0) {
-        [@"(nessuna mossa)" drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA];
+        [@"—" drawAtPoint:NSMakePoint(x, y) withAttributes:moveA];
     }
 
-    NSDictionary *hintA = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
-                             NSForegroundColorAttributeName: [NSColor colorWithWhite:0.45 alpha:1] };
-    [@"⌘N Nuova Partita  ·  ⌘Z Annulla mossa"
-     drawAtPoint:NSMakePoint(x, 10) withAttributes:hintA];
+    // ---- Bottom hint ----
+    NSDictionary *hintA = @{ NSFontAttributeName: [NSFont systemFontOfSize:9],
+                             NSForegroundColorAttributeName: [NSColor colorWithWhite:0.36 alpha:1] };
+    [@"⌘N nuova  ·  ⌘Z annulla"
+     drawAtPoint:NSMakePoint(x, 8) withAttributes:hintA];
 }
 
 - (void)drawEvalBar:(float)x y:(float)y width:(float)w {
-    float h = 20.0, sc = _scoreWhite / 100.0f;
+    float h = 18.0, sc = _scoreWhite / 100.0f;
     if (sc >  4.0f) sc =  4.0f;
     if (sc < -4.0f) sc = -4.0f;
     float wFrac = (sc + 4.0f) / 8.0f;
-    [[NSColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1] setFill];
-    NSRectFill(NSMakeRect(x, y, w, h));
-    [[NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1] setFill];
-    NSRectFill(NSMakeRect(x + w - wFrac*w, y, wFrac*w, h));
+    // Background (red side)
+    [[NSColor colorWithRed:0.55 green:0.08 blue:0.08 alpha:1] setFill];
+    NSBezierPath *bg = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(x, y, w, h)
+                                                       xRadius:4 yRadius:4];
+    [bg fill];
+    // Yellow side
+    if (wFrac > 0.01f) {
+        NSRect yr = NSMakeRect(x + w*(1-wFrac), y, w*wFrac, h);
+        [[NSColor colorWithRed:0.92 green:0.72 blue:0.05 alpha:1] setFill];
+        NSBezierPath *yp = [NSBezierPath bezierPathWithRoundedRect:yr xRadius:4 yRadius:4];
+        [yp fill];
+    }
+    // Centre tick
+    [[NSColor colorWithWhite:0 alpha:0.4] setFill];
+    NSRectFill(NSMakeRect(x + w/2 - 0.5, y, 1, h));
+    // Score label
     NSString *lbl = (_scoreWhite >= 29000) ? @"+M" : (_scoreWhite <= -29000) ? @"−M"
         : [NSString stringWithFormat:@"%+.1f", _scoreWhite/100.0];
     NSDictionary *la = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:10],
-                          NSForegroundColorAttributeName: [NSColor blackColor] };
+                          NSForegroundColorAttributeName: [NSColor colorWithWhite:0.1 alpha:1] };
     NSSize ls = [lbl sizeWithAttributes:la];
     [lbl drawAtPoint:NSMakePoint(x+w/2-ls.width/2, y+(h-ls.height)/2+1) withAttributes:la];
 }
