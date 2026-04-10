@@ -35,6 +35,18 @@ static void *engine_thread(void *arg) {
     return NULL;
 }
 
+// ---- Palette colori pedine ----
+typedef struct { const char *name; float r, g, b; } PaletteEntry;
+static const PaletteEntry kPalette[] = {
+    {"Giallo",    0.98f, 0.82f, 0.10f},
+    {"Arancione", 0.95f, 0.50f, 0.05f},
+    {"Rosso",     0.90f, 0.15f, 0.15f},
+    {"Verde",     0.20f, 0.78f, 0.30f},
+    {"Azzurro",   0.22f, 0.55f, 0.95f},
+    {"Viola",     0.65f, 0.20f, 0.88f},
+};
+#define kPaletteN 6
+
 // ---- Layout ----
 #define CELL    72.0
 #define COLS    7
@@ -94,6 +106,10 @@ typedef struct {
     BOOL         _engineBusy;
 
     search_params_t _sp;
+
+    // Colori personalizzati delle pedine (indice = C4_YELLOW / C4_RED)
+    NSColor  *_playerColor[2];
+    NSString *_playerName[2];
 }
 - (void)showSetupDialog:(BOOL)startup;
 - (void)promptNewGame;
@@ -113,6 +129,11 @@ typedef struct {
     _lastCol   = -1;
     _message   = @"Configura la partita dal menu Partita → Nuova Partita";
     _stopEngine = 1;
+    // Colori di default (classico giallo/rosso)
+    _playerColor[C4_YELLOW] = [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1];
+    _playerName [C4_YELLOW] = @"Giallo";
+    _playerColor[C4_RED]    = [NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:1];
+    _playerName [C4_RED]    = @"Rosso";
     return self;
 }
 - (void)dealloc { free(_st); free(_eng_st); }
@@ -141,31 +162,57 @@ typedef struct {
 
 - (void)showSetupDialog:(BOOL)startup {
     _stopEngine = 1; _generation++;
-    NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0,0,340,200)];
-    float y = 175;
+    NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0,0,350,340)];
+    float y = 315;
+
     NSTextField *(^lbl)(NSString*,float) = ^(NSString *t, float yy) {
         NSTextField *f = [NSTextField labelWithString:t];
-        f.frame = NSMakeRect(0, yy, 340, 17);
+        f.frame = NSMakeRect(0, yy, 350, 17);
         f.font  = [NSFont boldSystemFontOfSize:12];
         return f;
     };
+
+    // Etichette emoji per i 6 colori della palette
+    NSArray *clbls = @[@"  🟡  ", @"  🟠  ", @"  🔴  ", @"  🟢  ", @"  🔵  ", @"  🟣  "];
+
+    // ---- Modalità ----
     [box addSubview:lbl(@"Modalità", y)]; y -= 26;
     NSSegmentedControl *modeSC = [NSSegmentedControl
         segmentedControlWithLabels:@[@"  Uomo vs Computer  ",@"  Computer vs Computer  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    modeSC.frame = NSMakeRect(0, y, 340, 26); [modeSC setSelectedSegment:0];
+    modeSC.frame = NSMakeRect(0, y, 350, 26); [modeSC setSelectedSegment:0];
     [box addSubview:modeSC]; y -= 36;
-    [box addSubview:lbl(@"Il tuo colore", y)]; y -= 26;
-    NSSegmentedControl *colorSC = [NSSegmentedControl
-        segmentedControlWithLabels:@[@"  🟡  Giallo  ",@"  🔴  Rosso  "]
+
+    // ---- Giochi come (solo HvC) ----
+    [box addSubview:lbl(@"Giochi come", y)]; y -= 26;
+    NSSegmentedControl *sideSC = [NSSegmentedControl
+        segmentedControlWithLabels:@[@"  Primo (muove subito)  ",@"  Secondo  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    colorSC.frame = NSMakeRect(0, y, 220, 26); [colorSC setSelectedSegment:0];
-    [box addSubview:colorSC]; y -= 36;
+    sideSC.frame = NSMakeRect(0, y, 280, 26); [sideSC setSelectedSegment:0];
+    [box addSubview:sideSC]; y -= 36;
+
+    // ---- Colore Giocatore 1 (C4_YELLOW) ----
+    [box addSubview:lbl(@"Colore Giocatore 1 (muove per primo)", y)]; y -= 26;
+    NSSegmentedControl *color1SC = [NSSegmentedControl
+        segmentedControlWithLabels:clbls
+        trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+    color1SC.frame = NSMakeRect(0, y, 300, 26); [color1SC setSelectedSegment:0]; // default 🟡
+    [box addSubview:color1SC]; y -= 36;
+
+    // ---- Colore Giocatore 2 (C4_RED) ----
+    [box addSubview:lbl(@"Colore Giocatore 2 (muove per secondo)", y)]; y -= 26;
+    NSSegmentedControl *color2SC = [NSSegmentedControl
+        segmentedControlWithLabels:clbls
+        trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+    color2SC.frame = NSMakeRect(0, y, 300, 26); [color2SC setSelectedSegment:2]; // default 🔴
+    [box addSubview:color2SC]; y -= 36;
+
+    // ---- Difficoltà motore ----
     [box addSubview:lbl(@"Difficoltà motore", y)]; y -= 26;
     NSSegmentedControl *diffSC = [NSSegmentedControl
         segmentedControlWithLabels:@[@"  Lampo 0.5s  ",@"  Normale 2s  ",@"  Forte 5s  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    diffSC.frame = NSMakeRect(0, y, 340, 26); [diffSC setSelectedSegment:1];
+    diffSC.frame = NSMakeRect(0, y, 350, 26); [diffSC setSelectedSegment:1];
     [box addSubview:diffSC];
 
     NSAlert *alert = [[NSAlert alloc] init];
@@ -178,10 +225,31 @@ typedef struct {
     NSModalResponse resp = [alert runModal];
     if (!startup && resp == NSAlertSecondButtonReturn) return;
 
+    // Validazione: i due giocatori non possono avere lo stesso colore
+    int idx1 = (int)[color1SC selectedSegment];
+    int idx2 = (int)[color2SC selectedSegment];
+    if (idx1 == idx2) {
+        NSAlert *err = [[NSAlert alloc] init];
+        err.messageText = @"Colori uguali";
+        err.informativeText = @"I due giocatori non possono usare lo stesso colore. Scegli due colori diversi.";
+        [err addButtonWithTitle:@"OK"];
+        [err runModal];
+        [self showSetupDialog:startup];  // ripresenta il dialogo
+        return;
+    }
+
+    // Applica i colori scelti
+    PaletteEntry pe1 = kPalette[idx1];
+    PaletteEntry pe2 = kPalette[idx2];
+    _playerColor[C4_YELLOW] = [NSColor colorWithRed:pe1.r green:pe1.g blue:pe1.b alpha:1];
+    _playerName [C4_YELLOW] = [NSString stringWithUTF8String:pe1.name];
+    _playerColor[C4_RED]    = [NSColor colorWithRed:pe2.r green:pe2.g blue:pe2.b alpha:1];
+    _playerName [C4_RED]    = [NSString stringWithUTF8String:pe2.name];
+
     play_mode_t mode = ([modeSC selectedSegment] == 0) ? MODE_HVC : MODE_CVC;
-    int hc   = ([colorSC selectedSegment] == 0) ? C4_YELLOW : C4_RED;
-    int tms  = ([diffSC  selectedSegment] == 0) ? 500 :
-               ([diffSC  selectedSegment] == 1) ? 2000 : 5000;
+    int hc  = ([sideSC selectedSegment] == 0) ? C4_YELLOW : C4_RED;
+    int tms = ([diffSC selectedSegment] == 0) ? 500 :
+              ([diffSC selectedSegment] == 1) ? 2000 : 5000;
     [self resetGame:mode humanColor:hc timeMs:tms];
 }
 - (void)promptNewGame { [self showSetupDialog:NO]; }
@@ -219,8 +287,8 @@ typedef struct {
             NSBezierPath *cell = [NSBezierPath bezierPathWithOvalInRect:cr];
 
             uint64_t bit = 1ULL << c4_sq(c, r);
-            if      (b->bb[C4_YELLOW] & bit) [[NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1] setFill];
-            else if (b->bb[C4_RED]    & bit) [[NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:1] setFill];
+            if      (b->bb[C4_YELLOW] & bit) [_playerColor[C4_YELLOW] setFill];
+            else if (b->bb[C4_RED]    & bit) [_playerColor[C4_RED]    setFill];
             else                              [[NSColor colorWithRed:0.05 green:0.07 blue:0.18 alpha:1] setFill];
             [cell fill];
 
@@ -251,9 +319,7 @@ typedef struct {
         float rad = CELL/2 - 10;
         NSRect pr = NSMakeRect(cx-rad, cy-rad, rad*2, rad*2);
         NSBezierPath *pv = [NSBezierPath bezierPathWithOvalInRect:pr];
-        NSColor *pc = (stm == C4_YELLOW)
-            ? [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:0.7]
-            : [NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:0.7];
+        NSColor *pc = [_playerColor[stm] colorWithAlphaComponent:0.7];
         [pc setFill]; [pv fill];
     }
 
@@ -303,7 +369,7 @@ typedef struct {
     // ---- Mode / turn ----
     const c4_board_t *b = c4_state_as_board(_st);
     int stm = b->side_to_move;
-    NSString *turnS = (stm == C4_YELLOW) ? @"🟡 Giallo" : @"🔴 Rosso";
+    NSString *turnS = _playerName[stm];
     NSString *busyS = _engineBusy ? @" ⏳" : @"";
     [[NSString stringWithFormat:@"%@ · %@%@",
       (_mode == MODE_HVC) ? @"HvC" : @"CvC", turnS, busyS]
@@ -383,15 +449,15 @@ typedef struct {
     if (sc >  4.0f) sc =  4.0f;
     if (sc < -4.0f) sc = -4.0f;
     float wFrac = (sc + 4.0f) / 8.0f;
-    // Background (red side)
-    [[NSColor colorWithRed:0.55 green:0.08 blue:0.08 alpha:1] setFill];
+    // Background (lato C4_RED)
+    [_playerColor[C4_RED] setFill];
     NSBezierPath *bg = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(x, y, w, h)
                                                        xRadius:4 yRadius:4];
     [bg fill];
-    // Yellow side
+    // Lato C4_YELLOW (proporzione vantaggio)
     if (wFrac > 0.01f) {
         NSRect yr = NSMakeRect(x + w*(1-wFrac), y, w*wFrac, h);
-        [[NSColor colorWithRed:0.92 green:0.72 blue:0.05 alpha:1] setFill];
+        [_playerColor[C4_YELLOW] setFill];
         NSBezierPath *yp = [NSBezierPath bezierPathWithRoundedRect:yr xRadius:4 yRadius:4];
         [yp fill];
     }
@@ -471,8 +537,7 @@ typedef struct {
     game_result_t post = GAME_RESULT_NONE;
     int terminal = _api->is_terminal(_st, &post);
     if (terminal && post == GAME_RESULT_LOSS)
-        _message = [NSString stringWithFormat:@"Vince %@!",
-                    (stm == C4_YELLOW) ? @"🟡 Giallo" : @"🔴 Rosso"];
+        _message = [NSString stringWithFormat:@"Vince %@!", _playerName[stm]];
     else if (terminal && post == GAME_RESULT_DRAW)
         _message = @"Pareggio — tabellone pieno!";
     else
