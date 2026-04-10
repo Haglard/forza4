@@ -35,17 +35,30 @@ static void *engine_thread(void *arg) {
     return NULL;
 }
 
+// ---- Palette colori pedine ----
+typedef struct { const char *name; float r, g, b; } PaletteEntry;
+static const PaletteEntry kPalette[] = {
+    {"Giallo",    0.98f, 0.82f, 0.10f},
+    {"Arancione", 0.95f, 0.50f, 0.05f},
+    {"Rosso",     0.90f, 0.15f, 0.15f},
+    {"Verde",     0.20f, 0.78f, 0.30f},
+    {"Azzurro",   0.22f, 0.55f, 0.95f},
+    {"Viola",     0.65f, 0.20f, 0.88f},
+};
+#define kPaletteN 6
+
 // ---- Layout ----
-#define CELL   72.0
-#define COLS   7
-#define ROWS   6
-#define BRD_X  40.0
-#define BRD_Y  60.0
-#define BRD_W  (COLS * CELL)
-#define BRD_H  (ROWS * CELL)
-#define WIN_W  620.0
-#define WIN_H  600.0
-#define PANEL_X (BRD_X + BRD_W + 18.0)
+#define CELL    72.0
+#define COLS    7
+#define ROWS    6
+#define BRD_X   24.0
+#define BRD_Y   56.0
+#define BRD_W   (COLS * CELL)
+#define BRD_H   (ROWS * CELL)
+#define WIN_W   820.0
+#define WIN_H   600.0
+#define PANEL_X (BRD_X + BRD_W + 18.0)   // 24+504+18 = 546
+#define PNL_W   (WIN_W - PANEL_X - 14.0)  // ~260
 #define UNDO_MAX 42
 
 typedef enum { MODE_HVC = 1, MODE_CVC = 2 } play_mode_t;
@@ -93,6 +106,10 @@ typedef struct {
     BOOL         _engineBusy;
 
     search_params_t _sp;
+
+    // Colori personalizzati delle pedine (indice = C4_YELLOW / C4_RED)
+    NSColor  *_playerColor[2];
+    NSString *_playerName[2];
 }
 - (void)showSetupDialog:(BOOL)startup;
 - (void)promptNewGame;
@@ -112,6 +129,11 @@ typedef struct {
     _lastCol   = -1;
     _message   = @"Configura la partita dal menu Partita → Nuova Partita";
     _stopEngine = 1;
+    // Colori di default (classico giallo/rosso)
+    _playerColor[C4_YELLOW] = [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1];
+    _playerName [C4_YELLOW] = @"Giallo";
+    _playerColor[C4_RED]    = [NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:1];
+    _playerName [C4_RED]    = @"Rosso";
     return self;
 }
 - (void)dealloc { free(_st); free(_eng_st); }
@@ -128,6 +150,7 @@ typedef struct {
     _message = @"Partita iniziata";
     _sinfoValid = NO; _scoreWhite = 0; _engineBusy = NO;
     memset(_hist, 0, sizeof(_hist));
+    c4_new_game_randomize();  // re-seed Zobrist → TT misses → varied play
     c4_init_state_str(_st, "startpos");
     memset(&_sp, 0, sizeof(_sp));
     _sp.use_time = 1; _sp.time_ms = tms; _sp.max_depth = 99;
@@ -139,31 +162,57 @@ typedef struct {
 
 - (void)showSetupDialog:(BOOL)startup {
     _stopEngine = 1; _generation++;
-    NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0,0,340,200)];
-    float y = 175;
+    NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0,0,350,340)];
+    float y = 315;
+
     NSTextField *(^lbl)(NSString*,float) = ^(NSString *t, float yy) {
         NSTextField *f = [NSTextField labelWithString:t];
-        f.frame = NSMakeRect(0, yy, 340, 17);
+        f.frame = NSMakeRect(0, yy, 350, 17);
         f.font  = [NSFont boldSystemFontOfSize:12];
         return f;
     };
+
+    // Etichette emoji per i 6 colori della palette
+    NSArray *clbls = @[@"  🟡  ", @"  🟠  ", @"  🔴  ", @"  🟢  ", @"  🔵  ", @"  🟣  "];
+
+    // ---- Modalità ----
     [box addSubview:lbl(@"Modalità", y)]; y -= 26;
     NSSegmentedControl *modeSC = [NSSegmentedControl
         segmentedControlWithLabels:@[@"  Uomo vs Computer  ",@"  Computer vs Computer  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    modeSC.frame = NSMakeRect(0, y, 340, 26); [modeSC setSelectedSegment:0];
+    modeSC.frame = NSMakeRect(0, y, 350, 26); [modeSC setSelectedSegment:0];
     [box addSubview:modeSC]; y -= 36;
-    [box addSubview:lbl(@"Il tuo colore", y)]; y -= 26;
-    NSSegmentedControl *colorSC = [NSSegmentedControl
-        segmentedControlWithLabels:@[@"  🟡  Giallo  ",@"  🔴  Rosso  "]
+
+    // ---- Giochi come (solo HvC) ----
+    [box addSubview:lbl(@"Giochi come", y)]; y -= 26;
+    NSSegmentedControl *sideSC = [NSSegmentedControl
+        segmentedControlWithLabels:@[@"  Primo (muove subito)  ",@"  Secondo  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    colorSC.frame = NSMakeRect(0, y, 220, 26); [colorSC setSelectedSegment:0];
-    [box addSubview:colorSC]; y -= 36;
+    sideSC.frame = NSMakeRect(0, y, 280, 26); [sideSC setSelectedSegment:0];
+    [box addSubview:sideSC]; y -= 36;
+
+    // ---- Colore Giocatore 1 (C4_YELLOW) ----
+    [box addSubview:lbl(@"Colore Giocatore 1 (muove per primo)", y)]; y -= 26;
+    NSSegmentedControl *color1SC = [NSSegmentedControl
+        segmentedControlWithLabels:clbls
+        trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+    color1SC.frame = NSMakeRect(0, y, 300, 26); [color1SC setSelectedSegment:0]; // default 🟡
+    [box addSubview:color1SC]; y -= 36;
+
+    // ---- Colore Giocatore 2 (C4_RED) ----
+    [box addSubview:lbl(@"Colore Giocatore 2 (muove per secondo)", y)]; y -= 26;
+    NSSegmentedControl *color2SC = [NSSegmentedControl
+        segmentedControlWithLabels:clbls
+        trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+    color2SC.frame = NSMakeRect(0, y, 300, 26); [color2SC setSelectedSegment:2]; // default 🔴
+    [box addSubview:color2SC]; y -= 36;
+
+    // ---- Difficoltà motore ----
     [box addSubview:lbl(@"Difficoltà motore", y)]; y -= 26;
     NSSegmentedControl *diffSC = [NSSegmentedControl
         segmentedControlWithLabels:@[@"  Lampo 0.5s  ",@"  Normale 2s  ",@"  Forte 5s  "]
         trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
-    diffSC.frame = NSMakeRect(0, y, 340, 26); [diffSC setSelectedSegment:1];
+    diffSC.frame = NSMakeRect(0, y, 350, 26); [diffSC setSelectedSegment:1];
     [box addSubview:diffSC];
 
     NSAlert *alert = [[NSAlert alloc] init];
@@ -176,10 +225,31 @@ typedef struct {
     NSModalResponse resp = [alert runModal];
     if (!startup && resp == NSAlertSecondButtonReturn) return;
 
+    // Validazione: i due giocatori non possono avere lo stesso colore
+    int idx1 = (int)[color1SC selectedSegment];
+    int idx2 = (int)[color2SC selectedSegment];
+    if (idx1 == idx2) {
+        NSAlert *err = [[NSAlert alloc] init];
+        err.messageText = @"Colori uguali";
+        err.informativeText = @"I due giocatori non possono usare lo stesso colore. Scegli due colori diversi.";
+        [err addButtonWithTitle:@"OK"];
+        [err runModal];
+        [self showSetupDialog:startup];  // ripresenta il dialogo
+        return;
+    }
+
+    // Applica i colori scelti
+    PaletteEntry pe1 = kPalette[idx1];
+    PaletteEntry pe2 = kPalette[idx2];
+    _playerColor[C4_YELLOW] = [NSColor colorWithRed:pe1.r green:pe1.g blue:pe1.b alpha:1];
+    _playerName [C4_YELLOW] = [NSString stringWithUTF8String:pe1.name];
+    _playerColor[C4_RED]    = [NSColor colorWithRed:pe2.r green:pe2.g blue:pe2.b alpha:1];
+    _playerName [C4_RED]    = [NSString stringWithUTF8String:pe2.name];
+
     play_mode_t mode = ([modeSC selectedSegment] == 0) ? MODE_HVC : MODE_CVC;
-    int hc   = ([colorSC selectedSegment] == 0) ? C4_YELLOW : C4_RED;
-    int tms  = ([diffSC  selectedSegment] == 0) ? 500 :
-               ([diffSC  selectedSegment] == 1) ? 2000 : 5000;
+    int hc  = ([sideSC selectedSegment] == 0) ? C4_YELLOW : C4_RED;
+    int tms = ([diffSC selectedSegment] == 0) ? 500 :
+              ([diffSC selectedSegment] == 1) ? 2000 : 5000;
     [self resetGame:mode humanColor:hc timeMs:tms];
 }
 - (void)promptNewGame { [self showSetupDialog:NO]; }
@@ -217,8 +287,8 @@ typedef struct {
             NSBezierPath *cell = [NSBezierPath bezierPathWithOvalInRect:cr];
 
             uint64_t bit = 1ULL << c4_sq(c, r);
-            if      (b->bb[C4_YELLOW] & bit) [[NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1] setFill];
-            else if (b->bb[C4_RED]    & bit) [[NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:1] setFill];
+            if      (b->bb[C4_YELLOW] & bit) [_playerColor[C4_YELLOW] setFill];
+            else if (b->bb[C4_RED]    & bit) [_playerColor[C4_RED]    setFill];
             else                              [[NSColor colorWithRed:0.05 green:0.07 blue:0.18 alpha:1] setFill];
             [cell fill];
 
@@ -249,9 +319,7 @@ typedef struct {
         float rad = CELL/2 - 10;
         NSRect pr = NSMakeRect(cx-rad, cy-rad, rad*2, rad*2);
         NSBezierPath *pv = [NSBezierPath bezierPathWithOvalInRect:pr];
-        NSColor *pc = (stm == C4_YELLOW)
-            ? [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:0.7]
-            : [NSColor colorWithRed:0.90 green:0.15 blue:0.15 alpha:0.7];
+        NSColor *pc = [_playerColor[stm] colorWithAlphaComponent:0.7];
         [pc setFill]; [pv fill];
     }
 
@@ -265,82 +333,142 @@ typedef struct {
 }
 
 - (void)drawPanel {
-    float x = PANEL_X, y = WIN_H - 28;
-    NSDictionary *titleA = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
-    NSDictionary *hdrA   = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:11],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
-    NSDictionary *bodyA  = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular],
-                              NSForegroundColorAttributeName: [NSColor secondaryLabelColor] };
-    NSDictionary *hiA    = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
-                              NSForegroundColorAttributeName: [NSColor labelColor] };
+    float x = PANEL_X, pw = PNL_W;
+    float y = WIN_H - 18;
 
+    // Panel background — slightly lighter than board area
+    [[NSColor colorWithRed:0.09 green:0.12 blue:0.26 alpha:1] setFill];
+    NSRectFill(NSMakeRect(PANEL_X - 10, 0, pw + 20, WIN_H));
+
+    NSColor *colBright = [NSColor colorWithWhite:0.93 alpha:1];
+    NSColor *colMid    = [NSColor colorWithWhite:0.68 alpha:1];
+    NSColor *colDim    = [NSColor colorWithWhite:0.42 alpha:1];
+    NSColor *colGold   = [NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1];
+    NSColor *colSep    = [NSColor colorWithWhite:0.26 alpha:1];
+
+    NSDictionary *titleA   = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
+                                NSForegroundColorAttributeName: colGold };
+    NSDictionary *sectionA = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:8],
+                                NSForegroundColorAttributeName: colDim,
+                                NSKernAttributeName: @(1.8) };
+    NSDictionary *labelA   = @{ NSFontAttributeName: [NSFont systemFontOfSize:11],
+                                NSForegroundColorAttributeName: colMid };
+    NSDictionary *valueA   = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightMedium],
+                                NSForegroundColorAttributeName: colBright };
+    NSDictionary *hiA      = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightBold],
+                                NSForegroundColorAttributeName: colGold };
+    NSDictionary *moveA    = @{ NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11
+                                                       weight:NSFontWeightRegular],
+                                NSForegroundColorAttributeName: colMid };
+
+    // ---- Title ----
     [@"Vibe Forza 4" drawAtPoint:NSMakePoint(x, y) withAttributes:titleA]; y -= 22;
 
+    // ---- Mode / turn ----
     const c4_board_t *b = c4_state_as_board(_st);
     int stm = b->side_to_move;
-    NSString *turnS = (stm == C4_YELLOW) ? @"🟡 Giallo" : @"🔴 Rosso";
-    NSString *modeS = (_mode == MODE_HVC) ? @"HvC" : @"CvC";
+    NSString *turnS = _playerName[stm];
     NSString *busyS = _engineBusy ? @" ⏳" : @"";
-    [[NSString stringWithFormat:@"%@ — Turno: %@%@", modeS, turnS, busyS]
-     drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 22;
+    [[NSString stringWithFormat:@"%@ · %@%@",
+      (_mode == MODE_HVC) ? @"HvC" : @"CvC", turnS, busyS]
+     drawAtPoint:NSMakePoint(x, y) withAttributes:labelA]; y -= 22;
 
-    // Eval bar
-    [self drawEvalBar:x y:y width:WIN_W - PANEL_X - 18]; y -= 26;
+    // ---- Eval bar ----
+    [self drawEvalBar:x y:y width:pw]; y -= 28;
 
+    // ---- Search stats ----
     if (_sinfoValid) {
+        [colSep setFill]; NSRectFill(NSMakeRect(x, y + 5, pw, 1)); y -= 16;
+        [@"ANALISI MOTORE" drawAtPoint:NSMakePoint(x, y) withAttributes:sectionA]; y -= 15;
+
         int sc = (_sinfoSide == C4_YELLOW) ? _sinfoScore : -_sinfoScore;
         NSString *scS = (abs(sc) >= 29000)
             ? [NSString stringWithFormat:@"%sMatto", sc > 0 ? "+" : "-"]
             : [NSString stringWithFormat:@"%+.2f", sc/100.0];
-        [[NSString stringWithFormat:@"Score: %@  depth: %d", scS, _sinfoDepth]
-         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+        NSString *nodesS = (_sinfoNodes >= 1000000)
+            ? [NSString stringWithFormat:@"%.2fM", _sinfoNodes/1e6]
+            : (_sinfoNodes >= 1000)
+            ? [NSString stringWithFormat:@"%.0fK", _sinfoNodes/1e3]
+            : [NSString stringWithFormat:@"%llu", (unsigned long long)_sinfoNodes];
         NSString *npsS = (_sinfoNPS >= 1e6)
-            ? [NSString stringWithFormat:@"%.1fM nps", _sinfoNPS/1e6]
-            : [NSString stringWithFormat:@"%.0fK nps", _sinfoNPS/1e3];
-        [[NSString stringWithFormat:@"%@  t:%.1fs", npsS, _sinfoTimeSec]
-         drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+            ? [NSString stringWithFormat:@"%.1fM/s", _sinfoNPS/1e6]
+            : [NSString stringWithFormat:@"%.0fK/s", _sinfoNPS/1e3];
+
+        // stat helper: label left, value right-aligned
+        __block float _sy = y;
+        void (^srow)(NSString *, NSString *) = ^(NSString *lbl, NSString *val) {
+            [lbl drawAtPoint:NSMakePoint(x, _sy) withAttributes:labelA];
+            NSSize vs = [val sizeWithAttributes:valueA];
+            [val drawAtPoint:NSMakePoint(x + pw - vs.width, _sy) withAttributes:valueA];
+            _sy -= 15;
+        };
+        srow(@"Valutazione", scS);
+        srow(@"Profondità",  [NSString stringWithFormat:@"%d", _sinfoDepth]);
+        srow(@"Nodi",        nodesS);
+        srow(@"NPS",         npsS);
+        srow(@"Tempo",       [NSString stringWithFormat:@"%.2fs", _sinfoTimeSec]);
+        y = _sy;
+
         if (_sinfoPV[0]) {
-            [[NSString stringWithFormat:@"PV: %@",
-              [NSString stringWithUTF8String:_sinfoPV]]
-             drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA]; y -= 16;
+            y -= 2;
+            [@"PV" drawAtPoint:NSMakePoint(x, y) withAttributes:labelA];
+            [[NSString stringWithUTF8String:_sinfoPV]
+             drawAtPoint:NSMakePoint(x + 26, y) withAttributes:moveA];
+            y -= 15;
         }
         y -= 4;
     }
 
-    [[NSColor separatorColor] setFill];
-    NSRectFill(NSMakeRect(x, y, WIN_W-PANEL_X-18, 1)); y -= 18;
-    [@"Mosse giocate" drawAtPoint:NSMakePoint(x, y) withAttributes:hdrA]; y -= 16;
-    int startH = (_histN > 18) ? _histN - 18 : 0;
+    // ---- Move history ----
+    [colSep setFill]; NSRectFill(NSMakeRect(x, y + 5, pw, 1)); y -= 16;
+    [@"MOSSE GIOCATE" drawAtPoint:NSMakePoint(x, y) withAttributes:sectionA]; y -= 15;
+
+    int maxH = (int)((y - 28) / 14);
+    if (maxH < 1) maxH = 1;
+    int startH = (_histN > maxH) ? _histN - maxH : 0;
     for (int i = startH; i < _histN; i++) {
-        NSString *ms = [NSString stringWithUTF8String:_hist[i]];
-        [[NSString stringWithFormat:@"%2d. %@", i+1, ms]
+        [[NSString stringWithFormat:@"%2d. %s", i+1, _hist[i]]
          drawAtPoint:NSMakePoint(x, y)
-         withAttributes:(i == _histN-1) ? hiA : bodyA]; y -= 15;
+         withAttributes:(i == _histN-1) ? hiA : moveA]; y -= 14;
     }
     if (_histN == 0) {
-        [@"(nessuna mossa)" drawAtPoint:NSMakePoint(x, y) withAttributes:bodyA];
+        [@"—" drawAtPoint:NSMakePoint(x, y) withAttributes:moveA];
     }
 
-    NSDictionary *hintA = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
-                             NSForegroundColorAttributeName: [NSColor tertiaryLabelColor] };
-    [@"⌘N Nuova Partita  ·  ⌘Z Annulla mossa"
-     drawAtPoint:NSMakePoint(x, 10) withAttributes:hintA];
+    // ---- Bottom hint ----
+    NSDictionary *hintA = @{ NSFontAttributeName: [NSFont systemFontOfSize:9],
+                             NSForegroundColorAttributeName: [NSColor colorWithWhite:0.36 alpha:1] };
+    [@"⌘N nuova  ·  ⌘Z annulla"
+     drawAtPoint:NSMakePoint(x, 8) withAttributes:hintA];
 }
 
 - (void)drawEvalBar:(float)x y:(float)y width:(float)w {
-    float h = 20.0, sc = _scoreWhite / 100.0f;
+    float h = 18.0, sc = _scoreWhite / 100.0f;
     if (sc >  4.0f) sc =  4.0f;
     if (sc < -4.0f) sc = -4.0f;
     float wFrac = (sc + 4.0f) / 8.0f;
-    [[NSColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1] setFill];
-    NSRectFill(NSMakeRect(x, y, w, h));
-    [[NSColor colorWithRed:0.98 green:0.82 blue:0.10 alpha:1] setFill];
-    NSRectFill(NSMakeRect(x + w - wFrac*w, y, wFrac*w, h));
+    // Background (lato C4_RED)
+    [_playerColor[C4_RED] setFill];
+    NSBezierPath *bg = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(x, y, w, h)
+                                                       xRadius:4 yRadius:4];
+    [bg fill];
+    // Lato C4_YELLOW (proporzione vantaggio)
+    if (wFrac > 0.01f) {
+        NSRect yr = NSMakeRect(x + w*(1-wFrac), y, w*wFrac, h);
+        [_playerColor[C4_YELLOW] setFill];
+        NSBezierPath *yp = [NSBezierPath bezierPathWithRoundedRect:yr xRadius:4 yRadius:4];
+        [yp fill];
+    }
+    // Centre tick
+    [[NSColor colorWithWhite:0 alpha:0.4] setFill];
+    NSRectFill(NSMakeRect(x + w/2 - 0.5, y, 1, h));
+    // Score label
     NSString *lbl = (_scoreWhite >= 29000) ? @"+M" : (_scoreWhite <= -29000) ? @"−M"
         : [NSString stringWithFormat:@"%+.1f", _scoreWhite/100.0];
     NSDictionary *la = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:10],
-                          NSForegroundColorAttributeName: [NSColor blackColor] };
+                          NSForegroundColorAttributeName: [NSColor colorWithWhite:0.1 alpha:1] };
     NSSize ls = [lbl sizeWithAttributes:la];
     [lbl drawAtPoint:NSMakePoint(x+w/2-ls.width/2, y+(h-ls.height)/2+1) withAttributes:la];
 }
@@ -409,8 +537,7 @@ typedef struct {
     game_result_t post = GAME_RESULT_NONE;
     int terminal = _api->is_terminal(_st, &post);
     if (terminal && post == GAME_RESULT_LOSS)
-        _message = [NSString stringWithFormat:@"Vince %@!",
-                    (stm == C4_YELLOW) ? @"🟡 Giallo" : @"🔴 Rosso"];
+        _message = [NSString stringWithFormat:@"Vince %@!", _playerName[stm]];
     else if (terminal && post == GAME_RESULT_DRAW)
         _message = @"Pareggio — tabellone pieno!";
     else
@@ -452,7 +579,18 @@ typedef struct {
     job->completion = ^(search_result_t *out) {
         self->_engineBusy = NO;
         if (self->_generation != gen) { [self setNeedsDisplay:YES]; return; }
-        if (!out->best_move) { self->_message = @"Motore: nessuna mossa"; [self setNeedsDisplay:YES]; return; }
+        if (out->pv_len == 0) {
+            // No PV found (budget expired before d=1): fallback to first legal move
+            game_move_t lms[C4_COLS];
+            int n = self->_api->generate_legal(self->_st, lms, C4_COLS);
+            if (n > 0) {
+                [self applyMove:lms[0]];
+            } else {
+                self->_message = @"Motore: nessuna mossa disponibile";
+                [self setNeedsDisplay:YES];
+            }
+            return;
+        }
         self->_scoreWhite   = (stm == C4_YELLOW) ? out->score : -out->score;
         self->_sinfoValid   = YES;
         self->_sinfoSide    = stm;
@@ -611,6 +749,7 @@ typedef struct {
 
     self.gameView = [[C4View alloc] initWithFrame:NSMakeRect(0,0,WIN_W,WIN_H)];
     self.window.contentView = self.gameView;
+    [NSApp activateIgnoringOtherApps:YES];
     [self.window makeKeyAndOrderFront:nil];
 
     // Menu
