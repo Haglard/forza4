@@ -3,7 +3,7 @@
 Motore per **Forza 4 (Connect Four)** scritto in **C11** con client grafico nativo **macOS (Cocoa/AppKit)**.
 
 Autori: **Sandro Borioni**, **ChatGPT**, **Claude**
-Versione: **1.0** M-bM-^@M-^T Licenza: **MIT**
+Versione: **1.0** -- Licenza: **MIT**
 
 > *not a single line of code is crafted by a human*
 
@@ -11,11 +11,11 @@ Versione: **1.0** M-bM-^@M-^T Licenza: **MIT**
 
 ## Descrizione
 
-Il progetto M-CM-( organizzato in tre layer:
+Il progetto e' organizzato in tre layer:
 
-- **[engine-core](https://github.com/Haglard/engine-core)** *(submodule in `extern/engine-core`)* M-bM-^@M-^T motore di ricerca negamax generico, transposition table, utility di sistema. Condiviso con chess-engine, dama e tris.
-- **connect4** M-bM-^@M-^T regole del Forza 4: board 7M-CM-^W6, generazione mosse, valutazione, zobrist.
-- **game_connect4** M-bM-^@M-^T adapter `GameAPI` che connette le regole al motore di ricerca.
+- **[engine-core](https://github.com/Haglard/engine-core)** *(submodule in `extern/engine-core`)* -- motore di ricerca negamax generico, transposition table, utility di sistema. Condiviso con chess-engine, dama e tris.
+- **connect4** -- regole del Forza 4: board 7x6, generazione mosse, valutazione, zobrist.
+- **game_connect4** -- adapter `GameAPI` che connette le regole al motore di ricerca.
 
 Il motore di ricerca non contiene una sola riga specifica per il Forza 4.
 
@@ -110,18 +110,18 @@ build/                out-of-source (non tracciato)
 ## Architettura
 
 ```
-M-bM-^TM-^LM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^P
-M-bM-^TM-^B   connect4_client     M-bM-^TM-^B  client macOS
-M-bM-^TM-^B   search_cli          M-bM-^TM-^B  strumenti CLI
-M-bM-^TM-^TM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-,M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^X
-           M-bM-^TM-^B
-M-bM-^TM-^LM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^VM-<M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^P
-M-bM-^TM-^B     game_connect4     M-bM-^TM-^B  GameAPI adapter
-M-bM-^TM-^TM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-,M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^X
-           M-bM-^TM-^B
-M-bM-^TM-^LM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^VM-<M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^P  M-bM-^TM-^LM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^P
-M-bM-^TM-^B    connect4     M-bM-^TM-^B  M-bM-^TM-^B  engine_core  M-bM-^TM-^B  submodule
-M-bM-^TM-^B (regole F4)     M-bM-^TM-^B  M-bM-^TM-^B  (negamax +   M-bM-^TM-^B
-M-bM-^TM-^B                 M-bM-^TM-^B  M-bM-^TM-^B   utility)    M-bM-^TM-^B
-M-bM-^TM-^TM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^X  M-bM-^TM-^TM-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^@M-bM-^TM-^X
+  +---------------------+
+  |   connect4_client   |   client macOS
+  |   search_cli        |   strumenti CLI
+  +----------+----------+
+             |
+  +----------+----------+
+  |    game_connect4    |   GameAPI adapter
+  +----------+----------+
+             |
+  +----------+--------+    +---------------+
+  |      connect4     |    |  engine_core  |  submodule
+  |   (regole F4)     |    |  (negamax +   |
+  |                   |    |   utility)    |
+  +-------------------+    +---------------+
 ```
