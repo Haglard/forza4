@@ -6,23 +6,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 include_directories(include)
 
 # ================================================================
-# core — generic utilities (shared with chess-engine / dama)
+# Shared engine/core library (git submodule)
 # ================================================================
-add_library(core STATIC
-    src/core/log.c src/core/vec.c src/core/hashmap.c src/core/time.c
-    src/core/rng.c src/core/bitops.c src/core/ringbuf.c src/core/pool.c
-    src/game/api.c src/game/nim.c
-)
-target_include_directories(core PUBLIC include)
-
-# ================================================================
-# engine — generic negamax / alpha-beta / TT
-# ================================================================
-add_library(engine STATIC
-    src/engine/search.c src/engine/tt.c
-)
-target_include_directories(engine PUBLIC include)
-target_link_libraries(engine PRIVATE core)
+add_subdirectory(extern/engine-core)
 
 # ================================================================
 # connect4 — board, movegen, eval, zobrist
@@ -32,7 +18,7 @@ add_library(connect4 STATIC
     src/connect4/eval.c  src/connect4/zobrist.c
 )
 target_include_directories(connect4 PUBLIC include)
-target_link_libraries(connect4 PRIVATE core)
+target_link_libraries(connect4 PRIVATE engine_core)
 
 # ================================================================
 # game_connect4 — GameAPI adapter
@@ -41,16 +27,16 @@ add_library(game_connect4 STATIC
     src/game/connect4_adapter.c
 )
 target_include_directories(game_connect4 PUBLIC include)
-target_link_libraries(game_connect4 PRIVATE connect4 core)
+target_link_libraries(game_connect4 PRIVATE connect4 engine_core)
 
 # ================================================================
 # CLI tools
 # ================================================================
 add_executable(search_cli tools/search_cli.c)
-target_link_libraries(search_cli PRIVATE game_connect4 connect4 engine core)
+target_link_libraries(search_cli PRIVATE game_connect4 connect4 engine_core)
 
 add_executable(selfplay_cli tools/selfplay_cli.c)
-target_link_libraries(selfplay_cli PRIVATE game_connect4 connect4 engine core)
+target_link_libraries(selfplay_cli PRIVATE game_connect4 connect4 engine_core)
 
 # ================================================================
 # macOS GUI client
@@ -61,7 +47,7 @@ if(APPLE)
     target_include_directories(connect4_client PRIVATE include)
     target_compile_options(connect4_client PRIVATE -fobjc-arc)
     target_link_libraries(connect4_client PRIVATE
-        game_connect4 connect4 engine core
+        game_connect4 connect4 engine_core
         "-framework AppKit" "-framework Foundation")
     set_target_properties(connect4_client PROPERTIES
         MACOSX_BUNDLE_BUNDLE_NAME          "Vibe Forza 4"

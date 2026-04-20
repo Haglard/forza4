@@ -1,0 +1,3 @@
+[submodule "extern/engine-core"]
+	path = extern/engine-core
+	url = https://github.com/Haglard/engine-core.git
